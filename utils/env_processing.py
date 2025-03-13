@@ -1,6 +1,6 @@
-import gym
-from gym import spaces
-from gym.wrappers.time_limit import TimeLimit
+import gymnasium as gym
+from gymnasium import spaces
+from gymnasium.wrappers import TimeLimit
 import numpy as np
 from typing import Union
 
@@ -51,7 +51,7 @@ def make_env(id_or_path: str) -> GymEnvironment:
             observation_representation=observation_representation,
         )
         env = GymEnvironment(outer_env)
-        env = TimeLimit(GridVerseWrapper(env), max_episode_steps=250)
+        env = TimeLimit(env, max_episode_steps=49)
 
     return env
 

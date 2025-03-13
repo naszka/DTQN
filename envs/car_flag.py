@@ -2,13 +2,13 @@
 
 import numpy as np
 from numpy.random import Generator
-import gym
-from gym import spaces
+import gymnasium as gym
+from gymnasium import spaces
 from pyglet.canvas.xlib import NoSuchDisplayException
 
 # Running on slurm
 try:
-    from gym.envs.classic_control import rendering as visualize
+    from gymnasium.envs.classic_control import rendering as visualize
 except NoSuchDisplayException:
     pass
 except ImportError:

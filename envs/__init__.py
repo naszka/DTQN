@@ -1,4 +1,5 @@
-from gym.envs.registration import register
+from gymnasium.envs.registration import register
+import numpy as np
 
 
 try:
@@ -208,4 +209,16 @@ register(
     entry_point="envs.mini_hack:MiniHackWrapper",
     kwargs={"env_id": None, "obs_type": "pixel_crop", "des_file": des_maze_v0},
     max_episode_steps=180,
+)
+
+
+############
+# MUSHROOM FOREST #
+############
+
+register(
+    id="Mushroom-forest",
+    entry_point="envs.mushroom_forest:Speaker0MushroomForest",
+    kwargs={"n_cells": 10, "m_features": 3, "feature_weights": np.array([1.0, 20.0, -1.0])},
+    max_episode_steps=200,
 )

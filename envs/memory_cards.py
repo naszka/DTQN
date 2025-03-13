@@ -1,5 +1,5 @@
-import gym
-from gym import spaces
+import gymnasium as gym
+from gymnasium import spaces
 from typing import Union, Tuple, Optional
 import numpy as np
 from numpy.random import Generator

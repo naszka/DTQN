@@ -30,7 +30,6 @@ class ReplayBuffer:
         self.max_episode_steps = max_episode_steps
         self.obs_mask = obs_mask
         self.pos = [0, 0]
-
         # Image domains
         if isinstance(env_obs_length, tuple):
             self.obss = np.full(
@@ -40,7 +39,7 @@ class ReplayBuffer:
                     *env_obs_length,
                 ],
                 obs_mask,
-                dtype=np.uint8,
+                dtype=np.int32,
             )
         else:
             self.obss = np.full(
@@ -66,7 +65,7 @@ class ReplayBuffer:
             [self.max_size, max_episode_steps, 1],
             dtype=np.bool_,
         )
-        self.episode_lengths = np.zeros([self.max_size], dtype=np.uint8)
+        self.episode_lengths = np.zeros([self.max_size], dtype=np.int32)
 
     def store(
         self,

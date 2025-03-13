@@ -1,8 +1,10 @@
+import pdb
+
 import torch
 import numpy as np
 import random
 import os
-import gym
+import gymnasium as gym
 from typing import Optional, Tuple
 
 
@@ -24,7 +26,7 @@ def set_global_seed(seed: int, *args: Tuple[gym.Env]) -> None:
     torch.manual_seed(tseed)
     np.random.seed(npseed)
     for env in args:
-        env.seed(seed=seed)
+        env.unwrapped.reset(seed=seed)
         env.observation_space.seed(seed=seed)
         env.action_space.seed(seed=seed)
     os.environ["PYTHONHASHSEED"] = str(ospyseed)

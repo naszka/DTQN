@@ -5,7 +5,7 @@ from typing import Optional, Tuple
 
 import torch
 import wandb
-from gym import Env
+from gymnasium import Env
 
 from utils import env_processing, epsilon_anneal
 from utils.agent_utils import MODEL_MAP, get_agent
@@ -213,13 +213,15 @@ def evaluate(
     for _ in range(eval_episodes):
         agent.context_reset(eval_env.reset())
         done = False
+        truncated = False
         ep_reward = 0
         if render:
             eval_env.render()
             sleep(0.5)
-        while not done:
+        steps = 0
+        while not (done or truncated):
             action = agent.get_action(epsilon=0.0)
-            obs_next, reward, done, info = eval_env.step(action)
+            obs_next, reward, done, truncated, info = eval_env.step(action)
             agent.observe(obs_next, action, reward, done)
             ep_reward += reward
             if render:
@@ -227,6 +229,7 @@ def evaluate(
                 if done:
                     print(f"Episode terminated. Episode reward: {ep_reward}")
                 sleep(0.5)
+            steps += 1
         total_reward += ep_reward
         total_steps += agent.context.timestep
         if info.get("is_success", False) or ep_reward > 0:
@@ -296,7 +299,6 @@ def train(
             agent.context_reset(env.reset())
         agent.train()
         eps.anneal()
-
         if timestep % eval_frequency == 0:
             hours = (time() - start_time) / 3600
             # Log training values
@@ -365,19 +367,24 @@ def step(agent, env: Env, eps: float) -> bool:
         done: bool, whether or not the episode has finished.
     """
     action = agent.get_action(epsilon=eps.val)
-    next_obs, reward, done, info = env.step(action)
+    next_obs, reward, done, truncated, info = env.step(action)
+
 
     # OpenAI Gym TimeLimit truncation: don't store it in the buffer as done
-    if info.get("TimeLimit.truncated", False):
+    if truncated:
         buffer_done = False
     else:
         buffer_done = done
+    try:
+        agent.observe(next_obs, action, reward, buffer_done)
+    except:
+        import pdb
+        pdb.set_trace()
+    env_done = done or truncated
+    return env_done
 
-    agent.observe(next_obs, action, reward, buffer_done)
-    return done
 
-
-def prepopulate(agent, prepop_steps: int, envs: Tuple[Env]) -> None:
+def prepopulate(agent, prepop_steps: int, envs: Tuple[Env], max_ep_length: int) -> None:
     """Prepopulate the replay buffer. Sample an enviroment on each episode.
 
     Arguments:
@@ -390,17 +397,20 @@ def prepopulate(agent, prepop_steps: int, envs: Tuple[Env]) -> None:
         env = RNG.rng.choice(envs)
         agent.context_reset(env.reset())
         done = False
-        while not done:
+        episode_length = 0
+        while episode_length < max_ep_length and not done:
             action = RNG.rng.integers(env.action_space.n)
-            next_obs, reward, done, info = env.step(action)
+            next_obs, reward, done, truncated, info = env.step(action)
+
 
             # OpenAI Gym TimeLimit truncation: don't store it in the buffer as done
-            if info.get("TimeLimit.truncated", False):
+            if truncated:
                 buffer_done = False
             else:
                 buffer_done = done
 
             agent.observe(next_obs, action, reward, buffer_done)
+            episode_length += 1
             timestep += 1
         agent.replay_buffer.flush()
 
@@ -414,6 +424,10 @@ def run_experiment(args):
     for env_str in args.envs:
         envs.append(env_processing.make_env(env_str))
         eval_envs.append(env_processing.make_env(env_str))
+    for env in envs:
+        env._max_episode_steps = args.max_episode_steps
+    for env in eval_envs:
+        env._max_episode_steps = args.max_episode_steps
     device = torch.device(args.device)
     set_global_seed(args.seed, *(envs + eval_envs))
 
@@ -447,7 +461,6 @@ def run_experiment(args):
     print(
         f"[ {timestamp()} ] Creating {args.model} with {sum(p.numel() for p in agent.policy_network.parameters())} parameters"
     )
-
     # Create logging dir
     policy_save_dir = os.path.join(
         os.getcwd(), "policies", args.project_name, *args.envs
@@ -492,7 +505,7 @@ def run_experiment(args):
     else:
         wandb_kwargs = {"resume": None}
         # Prepopulate the replay buffer
-        prepopulate(agent, 50_000, envs)
+        prepopulate(agent, 10000, envs, args.max_episode_steps)
         mean_success_rate = RunningAverage(10)
         mean_reward = RunningAverage(10)
         mean_episode_length = RunningAverage(10)

@@ -1,8 +1,8 @@
-import gym
-import gym.spaces
+import gymnasium as gym
+import gymnasium.spaces
 from typing import Union, Optional
 import numpy as np
-from gym.utils import seeding
+from gymnasium.utils import seeding
 
 
 class GridVerseWrapper(gym.Wrapper):

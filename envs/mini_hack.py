@@ -1,8 +1,8 @@
-import gym
+import gymnasium as gym
 import gym.spaces
 from typing import Union, Optional
 import numpy as np
-from gym.utils import seeding
+from gymnasium.utils import seeding
 
 
 GLYPHS = "glyphs_crop"
