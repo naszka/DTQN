@@ -166,7 +166,7 @@ class Speaker0MushroomForest(MushroomForest):
         obs = super()._get_dict_obs()
 
         # 50% chance to send a message about state or reward function
-        if self.np_random.random() < 0.9:
+        if self.np_random.random() < 0.5:
             # Message about state
             # Randomly choose a cell
             cell_idx = self.np_random.integers(0, self.n_cells)
