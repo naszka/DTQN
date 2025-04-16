@@ -104,7 +104,7 @@ def train_speaker_agent():
     parser.add_argument("--batch", type=int, default=32, help="Batch size")
     parser.add_argument("--eval-frequency", type=int, default=5_000,
                         help="How many training timesteps between evaluations")
-    parser.add_argument("--eval-episodes", type=int, default=10,
+    parser.add_argument("--eval-episodes", type=int, default=1,
                         help="Number of episodes for each evaluation")
     parser.add_argument("--device", type=str, default="cuda",
                         help="Pytorch device to use")
@@ -112,6 +112,12 @@ def train_speaker_agent():
                         help="Random seed")
     parser.add_argument("--verbose", action="store_true",
                         help="Print verbose output")
+    parser.add_argument(
+        "--max-episode-steps",
+        type=int,
+        default=-1,
+        help="The maximum number of steps allowed in the environment. If `env` has a `max_episode_steps`, this will be inferred. Otherwise, this argument must be supplied.",
+    )
 
     args = parser.parse_args()
 
@@ -171,7 +177,7 @@ def train_speaker_agent():
         args.lr,
         args.batch,
         50,  # context_len
-        100,  # max_episode_steps
+        50,  # max_episode_steps
         50,  # history
         10_000,  # tuf (target update frequency)
         0.99,  # discount
@@ -203,7 +209,7 @@ def train_speaker_agent():
     mean_episode_length = RunningAverage(10)
 
     # Create logger
-    args.envs = "SpeakerMushroomForest"
+    args.envs = ["SpeakerMushroomForest",]
     logger = get_logger(policy_path, args, {"name": "speaker_agent_training"})
 
     # Train the speaker agent
@@ -212,8 +218,8 @@ def train_speaker_agent():
         speaker_agent,
         [speaker_env],  # Train environments
         [speaker_env],  # Eval environments (same as train for now)
-        ["speaker_env"],  # Environment strings
-        ["speaker_env"],  # Eval environment strings
+        ["SpeakerMushroomForest",],  # Environment strings
+        ["SpeakerMushroomForest",],  # Eval environment strings
         args.num_steps,
         eps,
         args.eval_frequency,

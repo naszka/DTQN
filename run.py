@@ -217,6 +217,7 @@ def evaluate(
     num_successes = 0
     total_steps = 0
 
+
     for _ in range(eval_episodes):
         agent.context_reset(eval_env.reset())
         done = False
@@ -297,6 +298,8 @@ def train(
     # Choose an environment at the start and on every episode reset.
     env = RNG.rng.choice(envs)
     agent.context_reset(env.reset())
+
+    print("in train")
 
     for timestep in range(agent.num_train_steps, total_steps):
         done = step(agent, env, eps)

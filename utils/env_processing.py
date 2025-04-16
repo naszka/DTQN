@@ -31,7 +31,7 @@ def make_env(id_or_path: str) -> GymEnvironment:
     """Makes a GV gym environment."""
     print("Loading using gym.make")
     env = gym.make(id_or_path)
-    '''
+
     try:
         print("Loading using gym.make")
         env = gym.make(id_or_path)
@@ -55,7 +55,6 @@ def make_env(id_or_path: str) -> GymEnvironment:
         )
         env = GymEnvironment(outer_env)
         env = TimeLimit(env, max_episode_steps=49)
-    '''
 
     return env
 

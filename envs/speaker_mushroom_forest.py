@@ -2,6 +2,7 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 from .mushroom_forest import MushroomForest, encode_state
+from gymnasium.wrappers import TimeLimit
 
 
 class SpeakerMushroomForest(gym.Wrapper):
@@ -243,7 +244,7 @@ def create_speaker_env(n_cells, max_features, feature_weights, max_features_per_
     Returns:
         SpeakerMushroomForest: The speaker environment
     """
-    return SpeakerMushroomForest(
+    env =  SpeakerMushroomForest(
         n_cells=n_cells,
         max_features=max_features,
         feature_weights=feature_weights,
@@ -251,3 +252,7 @@ def create_speaker_env(n_cells, max_features, feature_weights, max_features_per_
         trained_listener=trained_listener,
         base_env=base_env
     )
+
+    env = TimeLimit(env, max_episode_steps=49)
+
+    return env
