@@ -3,14 +3,14 @@ import numpy as np
 from gymnasium import spaces
 
 
-def encode_state(obs, n_cells, m_features):
+def encode_state(obs, n_cells, max_features):
     """
     Encode the observation into a comprehensive feature vector
 
     Args:
     - obs: Dictionary observation from the environment
     - n_cells: Number of cells in the environment
-    - m_features: Number of features per cell
+    - max_features: Maximum number of features per cell
 
     Returns:
     - Numpy array representing the encoded state
@@ -19,22 +19,24 @@ def encode_state(obs, n_cells, m_features):
     position = np.zeros(n_cells)
     position[obs['position']] = 1
 
-    # Current cell features (binary)
+    # Current cell features (supporting variable number of features)
     current_features = obs['current_features']
 
     # Message encoding
     message = obs.get('message', {'type': None})
 
-    # Message type (one-hot)
-    message_type = np.zeros(2)
-    if message['type'] == 'state':
+    # Message type (one-hot encoding, now with three types)
+    message_type = np.zeros(3)
+    if message['type'] == 'empty':
         message_type[0] = 1
-    elif message['type'] == 'reward':
+    elif message['type'] == 'state':
         message_type[1] = 1
+    elif message['type'] == 'reward':
+        message_type[2] = 1
 
     # State message specific features
     state_cell_idx = np.zeros(n_cells)
-    state_feature_idx = np.zeros(m_features)
+    state_feature_idx = np.zeros(max_features)
     if message['type'] == 'state':
         if message['cell_idx'] is not None:
             state_cell_idx[message['cell_idx']] = 1
@@ -42,7 +44,7 @@ def encode_state(obs, n_cells, m_features):
             state_feature_idx[message['feature_idx']] = 1
 
     # Reward message specific features
-    reward_feature_idx = np.zeros(m_features)
+    reward_feature_idx = np.zeros(max_features)
     reward_weight = np.zeros(1)
     if message['type'] == 'reward':
         if 'feature_idx' in message:
@@ -63,26 +65,33 @@ def encode_state(obs, n_cells, m_features):
 
     return state_vector
 
-
 class MushroomForest(gym.Env):
     """
-    Env with binary features and linear rewards
+    Env with flexible features and linear rewards
 
     Args:
         n_cells (int): Number of cells in the grid
-        m_features (int): Number of binary features per cell
+        max_features (int): Maximum number of features per cell
         feature_weights (np.array): Weight vector for the linear reward function
+        max_features_per_cell (int, optional): Maximum number of features a cell can have.
+                                               Defaults to max_features.
     """
 
-    def __init__(self, n_cells, m_features, feature_weights):
+    def __init__(self, n_cells, max_features, feature_weights, max_features_per_cell=None):
         super(MushroomForest, self).__init__()
 
         self.n_cells = n_cells
-        self.m_features = m_features
+        self.max_features = max_features
         self.feature_weights = np.array(feature_weights)
 
+        # If max_features_per_cell not specified, default to max_features
+        self.max_features_per_cell = max_features_per_cell or max_features
+
         # Validate feature weights
-        assert len(self.feature_weights) == m_features, "Feature weights must match number of features"
+        assert len(self.feature_weights) == max_features, "Feature weights must match max number of features"
+
+        # Validate max features per cell
+        assert self.max_features_per_cell <= max_features, "Max features per cell cannot exceed total max features"
 
         # Action space: N visit actions + 1 pick action
         self.action_space = spaces.Discrete(n_cells + 1)
@@ -90,13 +99,13 @@ class MushroomForest(gym.Env):
 
         # Calculate the size of the encoded state vector
         self.encoded_state_size = (
-            n_cells +                # Position (one-hot)
-            m_features +             # Current cell features
-            2 +                      # Message type (one-hot)
-            n_cells +                # State message cell index (one-hot)
-            m_features +             # State message feature index (one-hot)
-            m_features +             # Reward message feature index (one-hot)
-            1                        # Reward message weight
+                n_cells +  # Position (one-hot)
+                max_features +  # Current cell features
+                3 +  # Message type (one-hot)
+                n_cells +  # State message cell index (one-hot)
+                max_features +  # State message feature index (one-hot)
+                max_features +  # Reward message feature index (one-hot)
+                1  # Reward message weight
         )
 
         # Update observation space to be a Box for the encoded state
@@ -113,8 +122,20 @@ class MushroomForest(gym.Env):
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
 
-        # Randomly initialize binary features
-        self.features = self.np_random.integers(0, 2, size=(self.n_cells, self.m_features))
+        # Initialize features with a flexible number of features per cell
+        self.features = np.zeros((self.n_cells, self.max_features), dtype=int)
+        for i in range(self.n_cells):
+            # Randomly choose the number of features for this cell
+            n_cell_features = self.np_random.integers(0, self.max_features_per_cell + 1)
+
+            # Randomly select which features to activate
+            feature_indices = self.np_random.choice(
+                self.max_features,
+                size=n_cell_features,
+                replace=False
+            )
+            self.features[i, feature_indices] = 1
+
         self.position = 0  # Start at cell 0
 
         return self._get_encoded_obs()
@@ -129,7 +150,7 @@ class MushroomForest(gym.Env):
     def _get_encoded_obs(self):
         """Returns the encoded observation vector"""
         dict_obs = self._get_dict_obs()
-        return encode_state(dict_obs, self.n_cells, self.m_features)
+        return encode_state(dict_obs, self.n_cells, self.max_features)
 
     def _calculate_reward(self, cell_idx):
         """Calculate reward for a cell based on its features"""
@@ -161,20 +182,45 @@ class MushroomForest(gym.Env):
 
 
 class Speaker0MushroomForest(MushroomForest):
+    def __init__(self, n_cells, max_features, feature_weights,
+                 max_features_per_cell,
+                 message_type_probs=(1 / 3, 1 / 3, 1 / 3)):
+        """
+        Initialize the environment with configurable message type probabilities
+
+        Args:
+        - message_type_probs (tuple): Probabilities for (empty, state, reward) messages
+                                      Must sum to 1
+        """
+        # Validate message type probabilities
+        assert len(message_type_probs) == 3, "Must provide exactly 3 probabilities"
+        assert np.isclose(sum(message_type_probs), 1.0), "Probabilities must sum to 1"
+
+        self.message_type_probs = message_type_probs
+        super().__init__(n_cells, max_features, feature_weights, max_features_per_cell)
+
+
+
     def _get_dict_obs(self):
         # Get the basic observation from the parent class
         obs = super()._get_dict_obs()
 
-        # 50% chance to send a message about state or reward function
-        if self.np_random.random() < 0.5:
-            # Message about state
-            # Randomly choose a cell
-            cell_idx = self.np_random.integers(0, self.n_cells)
+        # Choose message type based on provided probabilities
+        message_type = self.np_random.choice(
+            ['empty', 'state', 'reward'],
+            p=self.message_type_probs
+        )
 
-            # Find indices of features that are true (1) in the chosen cell
+        if message_type == 'empty':
+            # Empty message with all values set to 0
+            message = {
+                'type': 'empty'
+            }
+        elif message_type == 'state':
+            # Message about state (same as before)
+            cell_idx = self.np_random.integers(0, self.n_cells)
             true_feature_indices = np.where(self.features[cell_idx] == 1)[0]
 
-            # If there are any true features, pick one randomly
             if len(true_feature_indices) > 0:
                 feature_idx = self.np_random.choice(true_feature_indices)
                 message = {
@@ -183,16 +229,13 @@ class Speaker0MushroomForest(MushroomForest):
                     'feature_idx': int(feature_idx)
                 }
             else:
-                # If no true features, still share the cell but with a None feature
                 message = {
                     'type': 'state',
                     'cell_idx': cell_idx,
                     'feature_idx': None
                 }
-        else:
-            # Message about reward function
-            # Randomly select a feature index
-            feature_idx = self.np_random.integers(0, self.m_features)
+        else:  # reward message
+            feature_idx = self.np_random.integers(0, self.max_features)
             message = {
                 'type': 'reward',
                 'feature_idx': int(feature_idx),
@@ -204,32 +247,15 @@ class Speaker0MushroomForest(MushroomForest):
 
         return obs
 
-    def _get_encoded_obs(self):
-        """Returns the encoded observation vector"""
-        dict_obs = self._get_dict_obs()
-        return encode_state(dict_obs, self.n_cells, self.m_features)
 
-
+# Example usage would look like:
 if __name__ == "__main__":
-    # Create environment with 4 cells, 3 features each, and random weights
+    # Create environment with custom message type probabilities
     weights = np.array([1.0, 20.0, -1.0])
-    env = Speaker0MushroomForest(n_cells=10, m_features=3, feature_weights=weights)
-    print("Forest features:")
-    print(env.features)
-
-    # Reset environment
-    obs = env.reset()
-    print(f"Encoded observation shape: {obs.shape}")
-    env.render()
-
-    # Example episode
-    for _ in range(10):
-        action = env.action_space.sample()  # Random action
-        obs, reward, done, truncated, info = env.step(action)
-        print(f"\nAction: {'pick' if action == env.PICK_ACTION else f'visit {action}'}")
-        print(f"Reward: {reward}")
-        print(f"Encoded observation shape: {obs.shape}")
-        env.render()
-
-        if done:
-            break
+    env = Speaker0MushroomForest(
+        n_cells=10,
+        max_features=3,
+        feature_weights=weights,
+        max_features_per_cell=2,
+        message_type_probs=(0.1, 0.6, 0.3)  # 10% empty, 60% state, 30% reward
+    )

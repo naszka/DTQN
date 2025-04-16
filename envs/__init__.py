@@ -1,5 +1,6 @@
 from gymnasium.envs.registration import register
 import numpy as np
+import itertools
 
 
 try:
@@ -216,9 +217,33 @@ register(
 # MUSHROOM FOREST #
 ############
 
-register(
-    id="Mushroom-forest",
-    entry_point="envs.mushroom_forest:Speaker0MushroomForest",
-    kwargs={"n_cells": 10, "m_features": 3, "feature_weights": np.array([1.0, 20.0, -1.0])},
-    max_episode_steps=200,
-)
+
+def register_mushroom_forest_envs():
+    # Original feature weights
+    original_weights = [20, 2.0, -1.0]
+
+    # Generate all permutations of the feature weights
+    permutations = list(itertools.permutations(original_weights))
+
+    # Register an environment for each permutation
+    for i, perm in enumerate(permutations):
+        register(
+            id=f"MushroomForest-v{i + 1}",
+            entry_point="envs.mushroom_forest:Speaker0MushroomForest",
+            kwargs={
+                "n_cells": 10,
+                "max_features": 3,
+                "feature_weights": np.array(perm),
+                "max_features_per_cell": 1,
+                "message_type_probs" : (0, 0.5, 0.5)  # empty,state,reward
+
+            },
+            max_episode_steps=200,
+        )
+
+    print(f"Registered {len(permutations)} Mushroom Forest environments")
+    return permutations
+
+
+register_mushroom_forest_envs()
+

@@ -47,6 +47,13 @@ def get_args():
         help="Domain to use. You can supply multiple domains, but they must have the same observation and action space. With multiple environments, the agent will sample a new one on each episode reset for conducting policy rollouts and collection experience. During evaluation, it will perform the same evaluation for each domain (Note: this may significantly slow down your run! Consider increasing the eval-frequency or reducing the eval-episodes).",
     )
     parser.add_argument(
+        "--eval-envs",
+        type=str,
+        nargs="+",
+        default="MushroomForest-v1",
+        help="Domains to evaluate on.",
+    )
+    parser.add_argument(
         "--num-steps",
         type=int,
         default=2_000_000,
@@ -251,6 +258,7 @@ def train(
     envs: Tuple[Env],
     eval_envs: Tuple[Env],
     env_strs: Tuple[str],
+    eval_env_strs: Tuple[str],
     total_steps: int,
     eps: epsilon_anneal.EpsilonAnneal,
     eval_frequency: int,
@@ -314,7 +322,7 @@ def train(
                 "losses/hours": hours,
             }
             # Perform an evaluation for each of the eval environments and add to our log
-            for env_str, eval_env in zip(env_strs, eval_envs):
+            for env_str, eval_env in zip(eval_env_strs, eval_envs):
                 sr, ret, length = evaluate(agent, eval_env, eval_episodes)
 
                 log_vals.update(
@@ -336,7 +344,7 @@ def train(
                     f"[ {timestamp()} ] Training Steps: {timestep}, Env: {env_str}, Success Rate: {sr:.2f}, Return: {ret:.2f}, Episode Length: {length:.2f}, Hours: {hours:.2f}"
                 )
 
-        if save_policy and timestep % 50_000 == 0:
+        if save_policy and timestep % 5000 == 0:
             torch.save(agent.policy_network.state_dict(), policy_path)
 
         if time_remaining and time() - start_time >= time_remaining:
@@ -423,6 +431,7 @@ def run_experiment(args):
     eval_envs = []
     for env_str in args.envs:
         envs.append(env_processing.make_env(env_str))
+    for env_str in args.eval_envs:
         eval_envs.append(env_processing.make_env(env_str))
     for env in envs:
         env._max_episode_steps = args.max_episode_steps
@@ -466,9 +475,11 @@ def run_experiment(args):
         os.getcwd(), "policies", args.project_name, *args.envs
     )
     os.makedirs(policy_save_dir, exist_ok=True)
+    inner_env = envs[0].env.env.env
+    weight_str = [f"{num:.2f}" for num in inner_env.message_type_probs]
     policy_path = os.path.join(
         policy_save_dir,
-        f"model={args.model}_envs={','.join(args.envs)}_obs_embed={args.obs_embed}_a_embed={args.a_embed}_in_embed={args.in_embed}_context={args.context}_heads={args.heads}_layers={args.layers}_"
+        f"model={args.model}_m_dist={weight_str}_ncells={inner_env.n_cells}_fpc={inner_env.max_features_per_cell}_nf={inner_env.max_features}_weights={inner_env.feature_weights}_obs_embed={args.obs_embed}"
         f"batch={args.batch}_gate={args.gate}_identity={args.identity}_history={args.history}_pos={args.pos}_bag={args.bag_size}_seed={args.seed}",
     )
 
@@ -500,10 +511,14 @@ def run_experiment(args):
                 eps_val,
             ) = agent.load_checkpoint(policy_path)
             eps.val = eps_val
-            wandb_kwargs = {"resume": "must", "id": wandb_id}
+            weight_str = [round(num, 1) for num in inner_env.message_type_probs]
+            wandb_name = f"{args.model}_m_dist={weight_str}_ncells={inner_env.n_cells}_fpc={inner_env.max_features_per_cell}_nf={inner_env.max_features}_weights={inner_env.feature_weights}"
+            wandb_kwargs = {"resume": "must", "id": wandb_id, "name": wandb_name }
     # Begin training from scratch
     else:
-        wandb_kwargs = {"resume": None}
+        weight_str = [f"{num:.2f}" for num in inner_env.message_type_probs]
+        wandb_name = f"{args.model}_m_dist={weight_str}_ncells={inner_env.n_cells}_fpc={inner_env.max_features_per_cell}_nf={inner_env.max_features}_weights={inner_env.feature_weights}"
+        wandb_kwargs = {"resume": None,"name": wandb_name }
         # Prepopulate the replay buffer
         prepopulate(agent, 10000, envs, args.max_episode_steps)
         mean_success_rate = RunningAverage(10)
@@ -522,6 +537,7 @@ def run_experiment(args):
         envs,
         eval_envs,
         args.envs,
+        args.eval_envs,
         args.num_steps,
         eps,
         args.eval_frequency,
