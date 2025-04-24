@@ -1,6 +1,6 @@
 # Train mushroom forest listener and speaker
 
-register environments
+Create a list of registered environments. Registered environments are under DTQN/envs/__init__.py
 
 ```bash
 cd  DTQN
