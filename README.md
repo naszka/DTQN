@@ -1,3 +1,40 @@
+# Train mushroom forest listener and speaker
+
+register environments
+
+```bash
+cd  DTQN
+# Create an array of 80 MushroomForest environments
+ENVS=($(for i in {1..4}; do echo "MushroomForest-v$i"; done))
+
+# Convert the array to a space-separated string for command-line arguments
+ENV_LIST="${ENVS[@]}"
+```
+Train listener:
+
+```bash
+python run.py \
+    --envs ${ENV_LIST} \
+    --in-embed 64 \
+    --eval-frequency 50 \
+    --buf-size 10000 \
+    --max-episode-steps 50 \
+    --eval-envs MushroomForest-v5 MushroomForest-v6 \
+    --num-steps 200000
+```
+Train speaker using trained listener
+
+```bash
+python train-speaker-agent.py \
+--listener-model-path policies/DTQN-test/MushroomForest-v1/MushroomForest-v2/MushroomForest-v3/MushroomForest-v4/model=DTQN_R1_O0_ncells=10_fpc=1_nf=3_obs_embed=8_a_embed=0_in_embed=64_context=50_heads=8_layers=2_batch=32_gate=res_identity=False_history=50_pos=learned_bag=0_seed=1 \
+ --n-cells 10 \
+ --max-features 3 \ 
+--max-features-per-cell 1 \
+—num-steps 200000 \
+ --eval-frequency 50 \
+—max-episode-steps 50
+```
+
 # Deep Transformer Q-Networks for Partially Observable Reinforcement Learning
 
 Deep Transformer Q-Network (DTQN) is an extension of [DQN](https://www.nature.com/articles/nature14236) and [DRQN](https://arxiv.org/abs/1507.06527) designed to encode an agent's history effectively for solving partially observable reinforcement learning tasks.
