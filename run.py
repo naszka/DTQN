@@ -192,10 +192,10 @@ def get_args():
 
 
 def evaluate(
-    agent,
-    eval_env: Env,
-    eval_episodes: int,
-    render: Optional[bool] = None,
+        agent,
+        eval_env: Env,
+        eval_episodes: int,
+        render: Optional[bool] = None,
 ):
     """Evaluate the network for n_episodes using a greedy policy.
 
@@ -209,6 +209,7 @@ def evaluate(
         mean_success:           float, number of successes divided by number of episodes.
         mean_return:            float, the average return per episode.
         mean_episode_length:    float, the average episode length.
+        action_distribution:    dict, distribution of actions taken during evaluation.
     """
     # Set networks to eval mode (turns off dropout, etc.)
     agent.eval_on()
@@ -216,7 +217,7 @@ def evaluate(
     total_reward = 0
     num_successes = 0
     total_steps = 0
-
+    action_counts = {}
 
     for _ in range(eval_episodes):
         agent.context_reset(eval_env.reset())
@@ -229,6 +230,12 @@ def evaluate(
         steps = 0
         while not (done or truncated):
             action = agent.get_action(epsilon=0.0)
+
+            # Track actions
+            if action not in action_counts:
+                action_counts[action] = 0
+            action_counts[action] += 1
+
             obs_next, reward, done, truncated, info = eval_env.step(action)
             agent.observe(obs_next, action, reward, done)
             ep_reward += reward
@@ -247,31 +254,37 @@ def evaluate(
     agent.eval_off()
     # Prevent divide by 0
     episodes = max(eval_episodes, 1)
+
+    # Calculate action distribution percentages
+    total_actions = sum(action_counts.values()) or 1  # Avoid division by zero
+    action_distribution = {a: count / total_actions for a, count in action_counts.items()}
+
     return (
         num_successes / episodes,
         total_reward / episodes,
         total_steps / episodes,
+        action_distribution,  # Return action distribution
     )
 
 
 def train(
-    agent,
-    envs: Tuple[Env],
-    eval_envs: Tuple[Env],
-    env_strs: Tuple[str],
-    eval_env_strs: Tuple[str],
-    total_steps: int,
-    eps: epsilon_anneal.EpsilonAnneal,
-    eval_frequency: int,
-    eval_episodes: int,
-    policy_path: str,
-    save_policy: bool,
-    logger,
-    mean_success_rate: RunningAverage,
-    mean_episode_length: RunningAverage,
-    mean_reward: RunningAverage,
-    time_remaining: Optional[int],
-    verbose: bool = False,
+        agent,
+        envs: Tuple[Env],
+        eval_envs: Tuple[Env],
+        env_strs: Tuple[str],
+        eval_env_strs: Tuple[str],
+        total_steps: int,
+        eps: epsilon_anneal.EpsilonAnneal,
+        eval_frequency: int,
+        eval_episodes: int,
+        policy_path: str,
+        save_policy: bool,
+        logger,
+        mean_success_rate: RunningAverage,
+        mean_episode_length: RunningAverage,
+        mean_reward: RunningAverage,
+        time_remaining: Optional[int],
+        verbose: bool = False,
 ) -> None:
     """Train the agent.
 
@@ -301,13 +314,57 @@ def train(
 
     print("in train")
 
+    # Initialize action distribution tracking
+    action_counts = {}
+    episode_actions = []
+    episode_counter = 0
+    episode_rewards = 0
+
     for timestep in range(agent.num_train_steps, total_steps):
-        done = step(agent, env, eps)
+        # Get action and step info before calling step
+        action = agent.get_action(epsilon=eps.val)
+        episode_actions.append(action)
+
+        # Take step in environment
+        done = step(agent, env, eps, action)  # Pass action to step function
 
         if done:
+            episode_counter += 1
+            # Log action distribution for this episode
+            action_dist = {}
+            for a in range(env.action_space.n):
+                count = episode_actions.count(a)
+                action_dist[f"action_{a}"] = count
+
+            # Calculate distribution percentages
+            ep_length = len(episode_actions)
+            action_dist_pct = {f"action_{a}_pct": (episode_actions.count(a) / ep_length)
+                               for a in range(env.action_space.n)}
+
+            # Add to our running counter of all episodes
+            for a, count in action_dist.items():
+                if a not in action_counts:
+                    action_counts[a] = 0
+                action_counts[a] += count
+
+            # Log this episode's action distribution if using wandb
+            if logger == wandb and episode_counter % 10 == 0:  # Log every 10 episodes to avoid too much data
+                log_data = {
+                    "episode": episode_counter,
+                    "episode_length": ep_length,
+                    "episode_timestep": timestep,
+                    "epsilon": eps.val,
+                }
+                log_data.update(action_dist_pct)
+                logger.log(log_data, step=timestep)
+
+            # Reset for next episode
             agent.replay_buffer.flush()
             env = RNG.rng.choice(envs)
             agent.context_reset(env.reset())
+            episode_actions = []
+            episode_rewards = 0
+
         agent.train()
         eps.anneal()
         if timestep % eval_frequency == 0:
@@ -324,9 +381,15 @@ def train(
                 "losses/Min_Target_Value": agent.target_min.mean(),
                 "losses/hours": hours,
             }
+
+            # Add action distribution stats
+            total_actions = sum(action_counts.values()) or 1  # Avoid division by zero
+            for a, count in action_counts.items():
+                log_vals[f"actions/{a}_total_pct"] = count / total_actions
+
             # Perform an evaluation for each of the eval environments and add to our log
             for env_str, eval_env in zip(eval_env_strs, eval_envs):
-                sr, ret, length = evaluate(agent, eval_env, eval_episodes)
+                sr, ret, length, action_dist = evaluate(agent, eval_env, eval_episodes)
 
                 log_vals.update(
                     {
@@ -346,6 +409,9 @@ def train(
                 print(
                     f"[ {timestamp()} ] Training Steps: {timestep}, Env: {env_str}, Success Rate: {sr:.2f}, Return: {ret:.2f}, Episode Length: {length:.2f}, Hours: {hours:.2f}"
                 )
+                # Print action distribution
+                action_dist_str = ", ".join([f"{a}: {count / total_actions:.2f}" for a, count in action_counts.items()])
+                print(f"Action Distribution: {action_dist_str}")
 
         if save_policy and timestep % 5000 == 0:
             torch.save(agent.policy_network.state_dict(), policy_path)
@@ -366,20 +432,21 @@ def train(
             return
 
 
-def step(agent, env: Env, eps: float) -> bool:
+def step(agent, env: Env, eps: float, action=None) -> bool:
     """Use the agent's policy to get the next action, take it, and then record the result.
 
     Arguments:
         agent:  the agent to use.
         env:    gym.Env
         eps:    the epsilon value (for epsilon-greedy policy)
+        action: optional pre-determined action (if None, will get from agent)
 
     Returns:
         done: bool, whether or not the episode has finished.
     """
-    action = agent.get_action(epsilon=eps.val)
+    if action is None:
+        action = agent.get_action(epsilon=eps.val)
     next_obs, reward, done, truncated, info = env.step(action)
-
 
     # OpenAI Gym TimeLimit truncation: don't store it in the buffer as done
     if truncated:

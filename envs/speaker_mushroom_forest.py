@@ -83,10 +83,15 @@ class SpeakerMushroomForest(gym.Wrapper):
         self.listener_last_action = None
         self.current_message = None
 
+        # Get the unwrapped environment to access internal methods
+        unwrapped_env = self.forest_env
+        while hasattr(unwrapped_env, 'env'):
+            unwrapped_env = unwrapped_env.env
+
         # Initialize the listener's context if available
         if self.trained_listener is not None:
             # Get initial observation for the listener - without any message yet
-            raw_obs = self.forest_env._get_dict_obs()
+            raw_obs = unwrapped_env._get_dict_obs()
             listener_obs = encode_state(raw_obs, self.n_cells, self.max_features)
             self.trained_listener.context_reset(listener_obs)
 
@@ -95,15 +100,20 @@ class SpeakerMushroomForest(gym.Wrapper):
 
     def _get_speaker_obs(self):
         """Create the speaker's observation vector that has full knowledge of the environment"""
+        # Get the unwrapped environment to access internal fields
+        unwrapped_env = self.forest_env
+        while hasattr(unwrapped_env, 'env'):
+            unwrapped_env = unwrapped_env.env
+
         # Position (one-hot)
         position = np.zeros(self.n_cells)
-        position[self.forest_env.position] = 1
+        position[unwrapped_env.position] = 1
 
         # Full forest features matrix (flattened)
-        forest_features = self.forest_env.features.flatten()
+        forest_features = unwrapped_env.features.flatten()
 
         # Feature weights
-        weights = np.array(self.forest_env.feature_weights)
+        weights = np.array(unwrapped_env.feature_weights)
 
         # Last listener action (one-hot, including the pick action)
         listener_action = np.zeros(self.n_cells + 1)
@@ -128,6 +138,12 @@ class SpeakerMushroomForest(gym.Wrapper):
         Returns:
             dict: A message dictionary compatible with encode_state
         """
+
+        # Get the unwrapped environment
+        unwrapped_env = self.forest_env
+        while hasattr(unwrapped_env, 'env'):
+            unwrapped_env = unwrapped_env.env
+
         if action < self.max_features:
             # Send reward weight for feature action
             message = {
@@ -142,7 +158,7 @@ class SpeakerMushroomForest(gym.Wrapper):
             feature_idx = adjusted_action % self.max_features_per_cell
 
             # Check if the feature exists in the cell
-            if cell_idx < self.n_cells and feature_idx < self.max_features and self.forest_env.features[
+            if cell_idx < self.n_cells and feature_idx < self.max_features and unwrapped_env.features[
                 cell_idx, feature_idx] == 1:
                 # Feature exists in the cell
                 message = {
@@ -169,8 +185,13 @@ class SpeakerMushroomForest(gym.Wrapper):
         # Create message based on speaker's action
         message = self._create_message(action)
 
+        # Get the unwrapped environment to access internal methods
+        unwrapped_env = self.forest_env
+        while hasattr(unwrapped_env, 'env'):
+            unwrapped_env = unwrapped_env.env
+
         # Get the original observation
-        raw_obs = self.forest_env._get_dict_obs()
+        raw_obs = unwrapped_env._get_dict_obs()
 
         # Add the message to the observation for the listener
         raw_obs['message'] = message
@@ -193,12 +214,12 @@ class SpeakerMushroomForest(gym.Wrapper):
             listener_action = self.trained_listener.get_action(epsilon=0.0)
 
             # Take the listener's action in the environment
-            next_obs, reward, done, truncated, info = self.forest_env.step(listener_action)
+            next_obs, reward, done, truncated, info = unwrapped_env.step(listener_action)
 
             # Update listener state tracking
             self.listener_prev_reward = reward
             self.cumulative_reward += reward
-            self.listener_position = self.forest_env.position
+            self.listener_position = unwrapped_env.position
             self.listener_last_action = listener_action
 
             # The speaker's reward is the same as the listener's
@@ -210,7 +231,7 @@ class SpeakerMushroomForest(gym.Wrapper):
             info["cumulative_reward"] = self.cumulative_reward
         else:
             # If no listener provided (e.g. during testing), just return some basic info
-            next_obs, reward, done, truncated, info = self.forest_env.step(0)  # Take a default action
+            next_obs, reward, done, truncated, info = unwrapped_env.step(0)  # Take a default action
             speaker_reward = -1  # Default penalty for each step
 
         # Get the speaker's observation for the next state
@@ -221,10 +242,14 @@ class SpeakerMushroomForest(gym.Wrapper):
     def render(self):
         """Render the environment with additional speaker-specific information"""
         print(f"Speaker Environment - Listener position: {self.listener_position}")
+        # Get the unwrapped environment
+        unwrapped_env = self.forest_env
+        while hasattr(unwrapped_env, 'env'):
+            unwrapped_env = unwrapped_env.env
         if self.current_message is not None:
             print(f"Last message sent: {self.current_message}")
         print(f"Listener cumulative reward: {self.cumulative_reward}")
-        self.forest_env.render()
+        unwrapped_env.render()
 
 
 # Function to create the environment for the speaker agent

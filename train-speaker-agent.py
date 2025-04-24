@@ -118,14 +118,20 @@ def train_speaker_agent():
         default=-1,
         help="The maximum number of steps allowed in the environment. If `env` has a `max_episode_steps`, this will be inferred. Otherwise, this argument must be supplied.",
     )
+    parser.add_argument(
+        "--env",
+        type=str,
+        default="MushroomForest-v5",
+        help="Domain to use for training the speaker agent. the trained listener will be placed in the same environment.",
+    )
 
     args = parser.parse_args()
 
     # Set device
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
 
-    # Define feature weights (should match what was used to train the listener)
-    feature_weights = np.array([1.0, 20.0, -1.0])
+    # Define feature weights
+    feature_weights = np.array([20, 2.0, -1.0])
 
     # Set random seed first
     set_global_seed(args.seed)
@@ -133,12 +139,7 @@ def train_speaker_agent():
     print(f"[{timestamp()}] Creating base environment...")
 
     # First, create the shared base environment that both listener and speaker will use
-    base_mushroom_env = MushroomForest(
-        n_cells=args.n_cells,
-        max_features=args.max_features,
-        feature_weights=feature_weights,
-        max_features_per_cell=args.max_features_per_cell
-    )
+    base_mushroom_env = env_processing.make_env(args.env)
 
     print(f"[{timestamp()}] Created base environment with {args.n_cells} cells and {args.max_features} features")
 
