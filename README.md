@@ -22,7 +22,7 @@ python run.py \
     --eval-envs MushroomForest-v5 MushroomForest-v6 \
     --num-steps 200000
 ```
-## Interactove mode to test trained listener
+## Interactive mode to test trained listener
 
 ```bash
 python interactive_mode.py --policy-path /path/to/your/model.pt --env MushroomForest-v1
