@@ -137,8 +137,8 @@ class MushroomForest(gym.Env):
             self.features[i, feature_indices] = 1
 
         self.position = 0  # Start at cell 0
-
-        return self._get_encoded_obs()
+        raw_obs = self._get_dict_obs()
+        return self._get_encoded_obs(raw_obs)
 
     def _get_dict_obs(self):
         """Returns the raw dictionary observation (for internal use)"""
@@ -147,10 +147,10 @@ class MushroomForest(gym.Env):
             'current_features': self.features[self.position]
         }
 
-    def _get_encoded_obs(self):
+    def _get_encoded_obs(self, raw_obs):
         """Returns the encoded observation vector"""
-        dict_obs = self._get_dict_obs()
-        return encode_state(dict_obs, self.n_cells, self.max_features)
+
+        return encode_state(raw_obs, self.n_cells, self.max_features)
 
     def _calculate_reward(self, cell_idx):
         """Calculate reward for a cell based on its features"""
@@ -170,14 +170,14 @@ class MushroomForest(gym.Env):
         cell_rewards = [self._calculate_reward(i) for i in range(self.n_cells)]
         if all(reward <= 2 for reward in cell_rewards):
             done = True
-
-        return self._get_encoded_obs(), reward, done, False, {}
+        raw_obs = self._get_dict_obs()
+        return self._get_encoded_obs(raw_obs), reward, done, False, {"raw_obs": raw_obs}
 
     def render(self):
         print(f"Current position: {self.position}")
         raw_obs = self._get_dict_obs()
         print(f"Raw observation: {raw_obs}")
-        print(f"Encoded observation shape: {self._get_encoded_obs().shape}")
+        print(f"Encoded observation shape: {self._get_encoded_obs(raw_obs).shape}")
         print("Potential rewards:", [self._calculate_reward(i) for i in range(self.n_cells)])
 
 
