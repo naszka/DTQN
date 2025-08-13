@@ -10,7 +10,7 @@ ENVS=($(for i in {1..4}; do echo "MushroomForest-v$i"; done))
 # Convert the array to a space-separated string for command-line arguments
 ENV_LIST="${ENVS[@]}"
 ```
-Train listener:
+## Train listener:
 
 ```bash
 python run.py \
@@ -22,7 +22,14 @@ python run.py \
     --eval-envs MushroomForest-v5 MushroomForest-v6 \
     --num-steps 200000
 ```
-Train speaker using trained listener
+## Interactove mode to test trained listener
+
+```bash
+python interactive_mode.py --policy-path /path/to/your/model.pt --env MushroomForest-v1
+
+```
+
+## Train speaker using trained listener
 
 ```bash
 python train-speaker-agent.py \
