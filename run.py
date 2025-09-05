@@ -413,8 +413,16 @@ def train(
                 action_dist_str = ", ".join([f"{a}: {count / total_actions:.2f}" for a, count in action_counts.items()])
                 print(f"Action Distribution: {action_dist_str}")
 
-        if save_policy and timestep % 5000 == 0:
-            torch.save(agent.policy_network.state_dict(), policy_path)
+        if save_policy and timestep % 1000 == 0:
+            #torch.save(agent.policy_network.state_dict(), policy_path)
+            agent.save_checkpoint(
+                policy_path,
+                wandb.run.id if logger == wandb else None,
+                mean_success_rate,
+                mean_reward,
+                mean_episode_length,
+                eps,
+            )
 
         if time_remaining and time() - start_time >= time_remaining:
             print(
@@ -546,13 +554,14 @@ def run_experiment(args):
     )
     os.makedirs(policy_save_dir, exist_ok=True)
     inner_env = envs[0].env.env.env
-    weight_str = [f"{num:.2f}" for num in inner_env.message_type_probs]
+    weight_str = "[" + ", ".join(f"{x:.2f}" for x in inner_env.message_type_probs) + "]"
+    model_str = f"model={args.model}_m_dist={weight_str}_ncells={inner_env.n_cells}_fpc={inner_env.max_features_per_cell}_nf={inner_env.max_features}_weights={inner_env.feature_weights}_embed={args.in_embed}_layers{args.layers}"
     policy_path = os.path.join(
         policy_save_dir,
-        f"model={args.model}_m_dist={weight_str}_ncells={inner_env.n_cells}_fpc={inner_env.max_features_per_cell}_nf={inner_env.max_features}_weights={inner_env.feature_weights}_obs_embed={args.obs_embed}"
+        model_str,
         f"batch={args.batch}_gate={args.gate}_identity={args.identity}_history={args.history}_pos={args.pos}_bag={args.bag_size}_seed={args.seed}",
     )
-
+    os.makedirs(os.path.dirname(policy_path), exist_ok=True)
     # Enjoy mode
     if args.render:
         agent.policy_network.load_state_dict(
@@ -582,12 +591,12 @@ def run_experiment(args):
             ) = agent.load_checkpoint(policy_path)
             eps.val = eps_val
             weight_str = [round(num, 1) for num in inner_env.message_type_probs]
-            wandb_name = f"{args.model}_m_dist={weight_str}_ncells={inner_env.n_cells}_fpc={inner_env.max_features_per_cell}_nf={inner_env.max_features}_weights={inner_env.feature_weights}"
+            wandb_name = model_str
             wandb_kwargs = {"resume": "must", "id": wandb_id, "name": wandb_name }
     # Begin training from scratch
     else:
         weight_str = [f"{num:.2f}" for num in inner_env.message_type_probs]
-        wandb_name = f"{args.model}_m_dist={weight_str}_ncells={inner_env.n_cells}_fpc={inner_env.max_features_per_cell}_nf={inner_env.max_features}_weights={inner_env.feature_weights}"
+        wandb_name = model_str
         wandb_kwargs = {"resume": None,"name": wandb_name }
         # Prepopulate the replay buffer
         prepopulate(agent, 10000, envs, args.max_episode_steps)

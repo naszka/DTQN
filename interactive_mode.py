@@ -267,7 +267,7 @@ def main():
     parser.add_argument("--model", type=str, default="DTQN", help="Model type")
     parser.add_argument("--obs-embed", type=int, default=8)
     parser.add_argument("--a-embed", type=int, default=0)
-    parser.add_argument("--in-embed", type=int, default=128)
+    parser.add_argument("--in-embed", type=int, default=64)
     parser.add_argument("--context", type=int, default=50)
     parser.add_argument("--heads", type=int, default=8)
     parser.add_argument("--layers", type=int, default=2)
@@ -315,7 +315,8 @@ def main():
 
     # Load trained policy
     try:
-        agent.load_mini_checkpoint(args.policy_path)
+        agent.load_checkpoint(args.policy_path)
+        #agent.load_mini_checkpoint(args.policy_path)
         agent.eval_on()  # Set to evaluation mode
         print(f"✅ Loaded policy from {args.policy_path}")
     except Exception as e:

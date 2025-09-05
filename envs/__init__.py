@@ -220,7 +220,7 @@ register(
 
 def register_mushroom_forest_envs():
     # Original feature weights
-    original_weights = [20, 2.0, -1.0]
+    original_weights = [20, 0.0, -2.0]
 
     # Generate all permutations of the feature weights
     permutations = list(itertools.permutations(original_weights))
@@ -235,10 +235,10 @@ def register_mushroom_forest_envs():
                 "max_features": 3,
                 "feature_weights": np.array(perm),
                 "max_features_per_cell": 1,
-                "message_type_probs" : (0, 0.5, 0.5)  # empty,state,reward
+                "message_type_probs" : (1.0, 0, 0)  # empty,state,reward
 
             },
-            max_episode_steps=200,
+            max_episode_steps=50,
         )
 
     print(f"Registered {len(permutations)} Mushroom Forest environments")

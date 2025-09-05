@@ -65,6 +65,7 @@ def encode_state(obs, n_cells, max_features):
 
     return state_vector
 
+
 class MushroomForest(gym.Env):
     """
     Env with flexible features and linear rewards
@@ -122,19 +123,39 @@ class MushroomForest(gym.Env):
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
 
-        # Initialize features with a flexible number of features per cell
+        # Initialize features with structured distribution
         self.features = np.zeros((self.n_cells, self.max_features), dtype=int)
-        for i in range(self.n_cells):
-            # Randomly choose the number of features for this cell
-            n_cell_features = self.np_random.integers(0, self.max_features_per_cell + 1)
 
-            # Randomly select which features to activate
-            feature_indices = self.np_random.choice(
-                self.max_features,
-                size=n_cell_features,
-                replace=False
+        # Sort feature weights to identify most valuable features
+        sorted_indices = np.argsort(self.feature_weights)[::-1]  # Descending order
+        most_valuable_idx = sorted_indices[0]
+
+        # Get random cell positions for placement
+        available_cells = list(range(self.n_cells))
+
+        # Place exactly 2 most valuable mushrooms
+        most_valuable_count = min(2, len(available_cells))
+        if most_valuable_count > 0:
+            most_valuable_cells = self.np_random.choice(
+                available_cells, size=most_valuable_count, replace=False
             )
-            self.features[i, feature_indices] = 1
+            for cell in most_valuable_cells:
+                self.features[cell, most_valuable_idx] = 1
+                available_cells.remove(cell)
+
+        # Place 2 more mushrooms with randomly selected feature types
+        remaining_mushrooms = min(2, len(available_cells))
+        if remaining_mushrooms > 0:
+            # Select random cells for the remaining mushrooms
+            random_cells = self.np_random.choice(
+                available_cells, size=remaining_mushrooms, replace=False
+            )
+
+            # For each remaining mushroom, randomly select a feature type
+            for cell in random_cells:
+                # Randomly choose a feature index from all available features
+                feature_idx = self.np_random.integers(0, self.max_features)
+                self.features[cell, feature_idx] = 1
 
         self.position = 0  # Start at cell 0
         raw_obs = self._get_dict_obs()
@@ -179,6 +200,12 @@ class MushroomForest(gym.Env):
         print(f"Raw observation: {raw_obs}")
         print(f"Encoded observation shape: {self._get_encoded_obs(raw_obs).shape}")
         print("Potential rewards:", [self._calculate_reward(i) for i in range(self.n_cells)])
+        print("Feature distribution:")
+        for i in range(self.n_cells):
+            active_features = np.where(self.features[i] == 1)[0]
+            if len(active_features) > 0:
+                feature_values = [self.feature_weights[f] for f in active_features]
+                print(f"  Cell {i}: features {active_features} (values: {feature_values})")
 
 
 class Speaker0MushroomForest(MushroomForest):
@@ -198,8 +225,6 @@ class Speaker0MushroomForest(MushroomForest):
 
         self.message_type_probs = message_type_probs
         super().__init__(n_cells, max_features, feature_weights, max_features_per_cell)
-
-
 
     def _get_dict_obs(self):
         # Get the basic observation from the parent class
@@ -248,14 +273,28 @@ class Speaker0MushroomForest(MushroomForest):
         return obs
 
 
-# Example usage would look like:
+# Example usage with the new structured distribution
 if __name__ == "__main__":
-    # Create environment with custom message type probabilities
-    weights = np.array([1.0, 20.0, -1.0])
+    # Create environment with structured mushroom placement
+    weights = np.array([1.0, 20.0, -1.0])  # Low, High, Negative values
     env = Speaker0MushroomForest(
         n_cells=10,
         max_features=3,
         feature_weights=weights,
-        max_features_per_cell=2,
+        max_features_per_cell=1,  # Each cell has at most 1 feature
         message_type_probs=(0.1, 0.6, 0.3)  # 10% empty, 60% state, 30% reward
     )
+
+    # Test the environment
+    obs = env.reset()
+    env.render()
+    print("\n" + "=" * 50)
+
+    # Run a few steps to see the environment in action
+    for step in range(3):
+        action = env.action_space.sample()
+        obs, reward, done, truncated, info = env.step(action)
+        print(f"\nStep {step + 1}: Action {action}, Reward {reward}")
+        env.render()
+        if done:
+            break

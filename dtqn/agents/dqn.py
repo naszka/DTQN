@@ -277,7 +277,7 @@ class DqnAgent:
     def load_checkpoint(
         self, checkpoint_dir: str
     ) -> Tuple[str, RunningAverage, RunningAverage, RunningAverage, float]:
-        checkpoint = torch.load(checkpoint_dir + "_checkpoint.pt")
+        checkpoint = torch.load(checkpoint_dir + "_checkpoint.pt", weights_only=False)
         # checkpoint = np.load(checkpoint_dir + "_checkpoint.npz", allow_pickle=True)
 
         self.num_train_steps = checkpoint["step"]
